@@ -54,28 +54,27 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh '''
+                    echo "🚀 Déploiement Kubernetes..."
+
+                    kubectl apply -f k8s/mysql-pvc.yaml
+                    kubectl apply -f k8s/mysql-deployment.yaml
+                    kubectl apply -f k8s/mysql-service.yaml
+
+                    kubectl apply -f k8s/spring-deployment.yaml
+                    kubectl apply -f k8s/spring-service.yaml
+                '''
+            }
+        }
     }
 
     post {
         success {
-            echo '✅ Build & Push Docker réussis'
+            echo '✅ Build, Push Docker & Déploiement Kubernetes réussis'
         }
     }
-    
-    stage('Deploy to Kubernetes') {
-    steps {
-        sh '''
-          echo "🚀 Déploiement Kubernetes..."
-          kubectl apply -f k8s/mysql-pvc.yaml
-          kubectl apply -f k8s/mysql-deployment.yaml
-          kubectl apply -f k8s/mysql-service.yaml
-
-          kubectl apply -f k8s/spring-deployment.yaml
-          kubectl apply -f k8s/spring-service.yaml
-        '''
-    }
-}
-
-    
 }
 
