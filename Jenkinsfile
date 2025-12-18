@@ -5,6 +5,7 @@ pipeline {
     environment {
         MAVEN_HOME = tool 'M2_HOME'
         PATH = "${MAVEN_HOME}/bin:${env.PATH}"
+
         DOCKER_IMAGE = "oussemaaaaaa/student-management"
     }
 
@@ -34,6 +35,18 @@ pipeline {
             }
         }
 
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube-K8s') {
+                    sh '''
+                      mvn sonar:sonar \
+                      -Dsonar.projectKey=student-management \
+                      -Dsonar.projectName=student-management
+                    '''
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 sh 'docker build -t $DOCKER_IMAGE:latest .'
@@ -58,14 +71,14 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
-                    echo "🚀 Déploiement Kubernetes..."
+                  echo "🚀 Déploiement Kubernetes..."
 
-                    kubectl apply -f k8s/mysql-pvc.yaml
-                    kubectl apply -f k8s/mysql-deployment.yaml
-                    kubectl apply -f k8s/mysql-service.yaml
+                  kubectl apply -f k8s/mysql-pvc.yaml
+                  kubectl apply -f k8s/mysql-deployment.yaml
+                  kubectl apply -f k8s/mysql-service.yaml
 
-                    kubectl apply -f k8s/spring-deployment.yaml
-                    kubectl apply -f k8s/spring-service.yaml
+                  kubectl apply -f k8s/spring-deployment.yaml
+                  kubectl apply -f k8s/spring-service.yaml
                 '''
             }
         }
@@ -73,7 +86,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Build, Push Docker & Déploiement Kubernetes réussis'
+            echo '✅ Build Maven, Analyse SonarQube, Docker & Déploiement Kubernetes réussis'
+        }
+        failure {
+            echo '❌ Échec du pipeline'
         }
     }
 }
