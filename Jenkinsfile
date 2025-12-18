@@ -5,6 +5,7 @@ pipeline {
     environment {
         MAVEN_HOME = tool 'M2_HOME'
         PATH = "${MAVEN_HOME}/bin:${env.PATH}"
+        DOCKER_IMAGE = "oussemaaaaaa/student-management"
     }
 
     stages {
@@ -26,14 +27,38 @@ pipeline {
                 sh 'mvn compile'
             }
         }
+
+        stage('Package') {
+            steps {
+                sh 'mvn package -DskipTests'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $DOCKER_IMAGE:latest .'
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push $DOCKER_IMAGE:latest
+                    '''
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo '✅ Compilation réussie'
-        }
-        failure {
-            echo '❌ Échec de compilation'
+            echo '✅ Build & Push Docker réussis'
         }
     }
 }
