@@ -11,13 +11,14 @@ pipeline {
         DOCKER_IMAGE = "oussemaaaaaa/student-management"
 
         // SonarQube
-        SONARQUBE_SERVER = "SonarQube-K8s"
+        SONAR_PROJECT_KEY = "student-management"
+        SONAR_PROJECT_NAME = "student-management"
     }
 
     stages {
 
         /* ========================= */
-        /*        CHECKOUT           */
+        /*         CHECKOUT          */
         /* ========================= */
         stage('Checkout') {
             steps {
@@ -26,7 +27,7 @@ pipeline {
         }
 
         /* ========================= */
-        /*           CLEAN           */
+        /*           BUILD           */
         /* ========================= */
         stage('Clean') {
             steps {
@@ -34,18 +35,12 @@ pipeline {
             }
         }
 
-        /* ========================= */
-        /*          COMPILE          */
-        /* ========================= */
         stage('Compile') {
             steps {
                 sh 'mvn compile'
             }
         }
 
-        /* ========================= */
-        /*          PACKAGE          */
-        /* ========================= */
         stage('Package') {
             steps {
                 sh 'mvn package -DskipTests'
@@ -53,32 +48,49 @@ pipeline {
         }
 
         /* ========================= */
-        /*       SONARQUBE           */
+        /*     WAIT FOR SONARQUBE    */
+        /* ========================= */
+        stage('Wait for SonarQube') {
+            steps {
+                sh '''
+                  echo "⏳ Waiting for SonarQube to be ready..."
+                  until curl -s http://192.168.49.2:30090/api/system/status | grep -q '"status":"UP"'; do
+                    echo "SonarQube not ready yet..."
+                    sleep 10
+                  done
+                  echo "✅ SonarQube is UP"
+                '''
+            }
+        }
+
+        /* ========================= */
+        /*     SONARQUBE ANALYSIS    */
         /* ========================= */
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_SERVER}") {
+                withSonarQubeEnv('SonarQube-K8s') {
                     sh '''
                       mvn sonar:sonar \
-                      -Dsonar.projectKey=student-management \
-                      -Dsonar.projectName=student-management \
-                      -Dsonar.java.binaries=target
+                      -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                      -Dsonar.projectName=${SONAR_PROJECT_NAME} \
+                      -Dsonar.java.binaries=target \
+                      -Dsonar.ws.timeout=120
                     '''
                 }
             }
         }
 
         /* ========================= */
-        /*      BUILD DOCKER         */
+        /*      DOCKER BUILD         */
         /* ========================= */
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $DOCKER_IMAGE:latest .'
+                sh 'docker build -t ${DOCKER_IMAGE}:latest .'
             }
         }
 
         /* ========================= */
-        /*      PUSH DOCKER          */
+        /*      DOCKER PUSH          */
         /* ========================= */
         stage('Push Docker Image') {
             steps {
@@ -88,27 +100,26 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker push $DOCKER_IMAGE:latest
+                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                      docker push ${DOCKER_IMAGE}:latest
                     '''
                 }
             }
         }
 
         /* ========================= */
-        /*   DEPLOY KUBERNETES       */
+        /*   DEPLOY TO KUBERNETES    */
         /* ========================= */
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
-                  echo "🚀 Déploiement Kubernetes..."
+                  echo "🚀 Deploying to Kubernetes..."
+                  kubectl apply -f k8s/mysql-pvc.yaml
+                  kubectl apply -f k8s/mysql-deployment.yaml
+                  kubectl apply -f k8s/mysql-service.yaml
 
-                  kubectl apply -f k8s/mysql-pvc.yaml --validate=false
-                  kubectl apply -f k8s/mysql-deployment.yaml --validate=false
-                  kubectl apply -f k8s/mysql-service.yaml --validate=false
-
-                  kubectl apply -f k8s/spring-deployment.yaml --validate=false
-                  kubectl apply -f k8s/spring-service.yaml --validate=false
+                  kubectl apply -f k8s/spring-deployment.yaml
+                  kubectl apply -f k8s/spring-service.yaml
                 '''
             }
         }
@@ -116,10 +127,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Build, SonarQube, Docker & Déploiement Kubernetes réussis'
+            echo '✅ Pipeline Jenkins terminé avec SUCCÈS'
         }
         failure {
-            echo '❌ Pipeline échoué'
+            echo '❌ Pipeline Jenkins ÉCHOUÉ'
         }
     }
 }
